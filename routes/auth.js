@@ -3,6 +3,9 @@ const User = require('../models/User')
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = 'imgonnabeasuperstar';
 
 //Create a user using: POST "/api/auth/createuser". Doesn't require auth
 router.post('/createuser', [
@@ -41,12 +44,65 @@ router.post('/createuser', [
         //     })
         // })
 
-        res.json(user)
+        // res.json(user)
+
+        const data =  {
+            user: {
+                id: user.id
+            }
+        }
+        const authToken = jwt.sign(data, JWT_SECRET);
+        // console.log(authToken);
+        
+        res.json({authToken});
+
     } catch(error) {
         console.error(error.message)
-        res.status(500).send("Some Error Occured.")
+        res.status(500).send("Internal Server Error")
     }
 
 })
 
+//Authenticate user: POST "/api/auth/login". require auth
+router.post('/login', [
+    body('email', 'Enter a valid email.').isEmail(),
+    body('password', 'Password cannot be blank').exists(),
+    body('password', 'Password must be atleast 6 characters').isLength({min: 6}),
+] ,async (req, res) => {
+    //If there are errors, return bad request - 400 and the errors
+    const error = validationResult(req);
+    if(!error.isEmpty()) {
+        return res.status(400).json({error: error.array()})
+    }
+
+    const {email, password} = req.body
+
+    try {
+        let user = await User.findOne({email: email})
+        if(!user) {
+            console.log("User: " + user);
+            return res.status(400).json({error: 'Please login with correct credentials', message: error.message})
+        }
+
+        const pwdCompare = await bcrypt.compare(password, user.password);
+        if(!pwdCompare) {
+            console.log("Password: " + pwdCompare);
+            return res.status(400).json({error: 'Please login with correct credentials.', message: error.message})
+        }
+
+        const data =  {
+            user: {
+                id: user.id
+            }
+        }
+        const authToken = jwt.sign(data, JWT_SECRET);
+        res.json({authToken});
+
+    } catch(error) {
+        console.error(error.message);
+        res.status(500).send("Internal Server Error")
+        
+    }
+
+});
 module.exports = router;
