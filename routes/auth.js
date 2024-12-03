@@ -4,10 +4,11 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fetchuser = require('../middleware/fetchuser');
 
 const JWT_SECRET = 'imgonnabeasuperstar';
 
-//Create a user using: POST "/api/auth/createuser". Doesn't require auth
+//Route 1: Create a user using: POST "/api/auth/createuser". Doesn't require auth
 router.post('/createuser', [
     body('name', 'Enter a valid name.').isLength({min: 3}),
     body('email', 'Enter a valid email.').isEmail(),
@@ -63,16 +64,19 @@ router.post('/createuser', [
 
 })
 
-//Authenticate user: POST "/api/auth/login". require auth
+//Route 2: Authenticate user: POST "/api/auth/login". require auth but no login required
 router.post('/login', [
     body('email', 'Enter a valid email.').isEmail(),
-    body('password', 'Password cannot be blank').exists(),
+    body('password', 'Password cannot be blank').exists().notEmpty(), // Ensures the field exists and is not empty
     body('password', 'Password must be atleast 6 characters').isLength({min: 6}),
 ] ,async (req, res) => {
     //If there are errors, return bad request - 400 and the errors
     const error = validationResult(req);
+    // console.log(error);
+    
     if(!error.isEmpty()) {
-        return res.status(400).json({error: error.array()})
+        // return res.status(400).json({error: error.array()})
+        return res.status(400).json({error: error.array()[0].msg})
     }
 
     const {email, password} = req.body
@@ -95,14 +99,27 @@ router.post('/login', [
                 id: user.id
             }
         }
-        const authToken = jwt.sign(data, JWT_SECRET);
+        const authToken = jwt.sign(data, JWT_SECRET, { expiresIn: '1h' }); // Optional: Set expiration
         res.json({authToken});
 
     } catch(error) {
         console.error(error.message);
         res.status(500).send("Internal Server Error")
-        
     }
 
 });
+
+//Route 3: Get loggedin user details: POST "/api/auth/getuser". login required
+router.post('/getuser', fetchuser, async (req, res) => {
+    try{
+        const userId = req.user.id;
+        const user = await User.findById(userId).select('-password')
+        res.send(user)
+    } catch(error)  {
+        console.error(error.message);
+        res.status(500).send("Internal Server Error")
+    }
+});
+
+
 module.exports = router;
